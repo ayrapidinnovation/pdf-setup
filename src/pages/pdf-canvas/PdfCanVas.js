@@ -1,7 +1,5 @@
 import React from "react";
 import { useState, useEffect, useRef } from "react";
-import { Page } from "react-pdf";
-import { Document } from "react-pdf/dist/entry.webpack";
 import PdfFile from "../../assets/pdfFile.pdf";
 import * as jsPDF from "jspdf";
 import PdfSoccer from "../../assets/pdfSoccer.pdf";
@@ -27,17 +25,25 @@ const userMailList = [
 
 const doc = new jsPDF();
 const PdfCanVas = () => {
-  const [numPages, setNumberPages] = useState([]);
+  const [numPages, setNumPages] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [currentPdf, setCurrentPdf] = useState(PdfFile);
-  /* const [pdfDoc, setPdfDoc] = useState(doc); */
   const canvasRef = useRef(null);
+  const refs = useRef([]);
   const pageRef = useRef(null);
 
   useEffect(() => {
     const getPdf = async () => {
       const loadingTask = pdfjs.getDocument(currentPdf);
       const pdf = await loadingTask.promise;
+      const numberOfPages = pdf._pdfInfo.numPages;
+      if (numberOfPages > 0 && numPages.length <= 0) {
+        const pages = [];
+        for (let i = 1; i <= numberOfPages; i++) {
+          pages.push(i);
+        }
+        setNumPages(pages);
+      }
       const page = await pdf.getPage(currentPage);
       const canvas = canvasRef.current;
       const scale = 1;
@@ -54,13 +60,13 @@ const PdfCanVas = () => {
       await renderTask.promise;
     };
     getPdf();
-  }, [currentPage, currentPdf]);
+  }, [currentPage, currentPdf, numPages]);
 
   const modifyPdf = async () => {
-    /* doc.deletePage(currentPage); */
     const img = canvasRef.current.toDataURL("image/png", 1.0);
-    doc.addImage(img, "PNG", 0, 0, 211, 298);
+    doc.addImage(img, "PNG", 0, 0);
     doc.addPage(currentPage);
+    //console.log("internal=>", doc.internal.getNumberOfPages());
   };
 
   const handleDrop = (event) => {
@@ -114,17 +120,6 @@ const PdfCanVas = () => {
     return false;
   };
 
-  const onDocumentLoadSuccess = (successRes) => {
-    const numberOfPages = successRes._pdfInfo.numPages;
-    const pages = [];
-    if (numberOfPages > 0) {
-      for (let i = 1; i <= numberOfPages; i++) {
-        pages.push(i);
-      }
-    }
-    setNumberPages(pages);
-  };
-
   const selectPage = (page) => {
     setCurrentPage(page);
   };
@@ -132,6 +127,66 @@ const PdfCanVas = () => {
   const downloadPdf = () => {
     doc.save("edited-file.pdf");
   };
+
+  const addToRefs = (el) => {
+    if (el && !refs.current.includes(el)) {
+      refs.current.push(el);
+    }
+  };
+
+  useEffect(() => {
+    const renderSide = async () => {
+      const loadingTask = pdfjs.getDocument(currentPdf);
+      const pdf = await loadingTask.promise;
+      for (let i = 0; i < numPages.length; i++) {
+        const page = await pdf.getPage(i + 1);
+        const canvas = refs.current[i];
+        const scale = 0.3;
+        const viewport = page.getViewport({ scale: scale });
+        const context = canvas.getContext("2d");
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+        const renderContext = {
+          canvasContext: context,
+          viewport: viewport,
+        };
+        const renderTask = page.render(renderContext);
+        await renderTask.promise;
+
+        console.log("canvas==>", canvas);
+        console.log("page==>", page);
+        const img = canvas.toDataURL("image/png");
+
+        doc.addImage(img, 0, 0);
+        doc.addPage(i + 1);
+      }
+      if (
+        numPages.length > 0 &&
+        doc.internal.getNumberOfPages() > numPages.length
+      ) {
+        doc.deletePage(numPages.length + 1);
+      }
+    };
+    renderSide();
+  }, [currentPdf, numPages]);
+
+  const renderSidePDF = () => {
+    return (
+      <div>
+        {numPages && numPages.length > 0 && (
+          <div>
+            {numPages.map((pageNum, k) => (
+              <SidePdfview key={k}>
+                <canvas ref={addToRefs} onClick={() => selectPage(pageNum)} />
+                <p>{pageNum}</p>
+              </SidePdfview>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <Container>
       <button onClick={downloadPdf}>DownloadPdf</button>
@@ -166,23 +221,7 @@ const PdfCanVas = () => {
             contentEditable={true}
           />
         </PdfContainer>
-        <Document file={currentPdf} onLoadSuccess={onDocumentLoadSuccess}>
-          {numPages && numPages.length > 0 && (
-            <div>
-              {numPages.map((page, k) => (
-                <SidePdfview key={k}>
-                  <Page
-                    pageNumber={page}
-                    onClick={() => selectPage(page)}
-                    width={260}
-                    ref={pageRef}
-                  />
-                  <p>{page}</p>
-                </SidePdfview>
-              ))}
-            </div>
-          )}
-        </Document>
+        <div>{renderSidePDF()}</div>
       </Content>
     </Container>
   );

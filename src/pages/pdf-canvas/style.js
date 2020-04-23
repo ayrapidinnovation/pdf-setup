@@ -15,7 +15,6 @@ export const SidePdfview = styled.div`
   border: 1px solid #b5b5b5;
   box-sizing: border-box;
   margin-bottom: 2rem;
-
   p {
     padding: 5px;
     width: 10px;
